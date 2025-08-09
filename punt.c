@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 void incr(int *p){
+  printf("\d\n", *p);
   *p = *p + 1;
 }
 
@@ -16,7 +17,7 @@ int main(void){
   *y = 10; // assign 10 to the value pointed by y. It is equal to y[0]=10
   printf("x now is %d\n", x);
 
-  incr(y);
+  incr(y); // incr(&x)
   printf("x now is %d\n", x);
 
   return 0;

@@ -94,15 +94,19 @@ int main(void){
   set_cell(old_grid,11,10, ALIVE);
   set_cell(old_grid,11,9, ALIVE);
   set_cell(old_grid,10,8, ALIVE);
+  
+  char *old = old_grid;
+  char *new = new_grid;
 
   int delay = 1;
   while(1){
-    compute_new_state(old_grid, new_grid);
-    print_grid(new_grid);
+    compute_new_state(old, new);
+    print_grid(new);
     sleep(delay);
-    compute_new_state(new_grid, old_grid);
-    print_grid(old_grid);
-    sleep(delay);
+    // swap the two pointers
+    char *tmp = old;
+    old = new;
+    new = tmp;
   }
   return 0;
 }
