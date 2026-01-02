@@ -36,21 +36,47 @@ typedef struct tfparser{
 } tfparser;
 
 // name of funciton, its implementations and user funcionts
-struct FunctionTableEntry{
+struct tfctx;
+typedef struct FunctionTableEntry{
   tfobj *name;
-  void (*callback) (tfctx *ctx, tfobj *name);
-  tfobj *user_list;
-}
-
+  void (*callback) (struct tfctx *ctx, tfobj *name);
+  tfobj *user_func;
+} tffuncentry;
+  
 struct FunctionTable {
-  struct FuncitonTableEntry **func_table;
+  tffuncentry **func_table;
   size_t func_count;
-}
+};
 
-typedef struct tfctx { //contesto di esecuzione
+typedef struct tfctx{ //contesto di esecuzione
   tfobj *stack;
   struct FunctionTable *functable;
 } tfctx;
+
+void retain(tfobj *o){
+  o->refcount++;
+}
+
+void release(tfobj *o){
+  assert(o->refcount > 0);
+  o->refcount--;
+  if (o->refcount == 0) freeObject(o);
+}
+
+void freeObject(tfobj *o){
+  switch(o->type){
+  case TFOBJ_TYPE_LIST:
+    for(size_t j = 0; j < o->list.len; j++) {
+      tfobj *ele = o->list.ele[j];
+      release(ele);
+    }
+    break;
+  case TFOBJ_TYPE_SYMBOL:
+  case TFOBJ_TYPE_STR:
+    free(o->str.ptr);
+    break;
+  free(o);
+}
 
 // Allocation wrappers
 void *xmalloc(size_t size){
@@ -106,29 +132,18 @@ tfobj *createSymbolObject(char *s, size_t len){
   return o;
 }
 
-void freeObject(tfobj *o){
-  switch(o->type){
-  case TFOBJ_TYPE_LIST:
-    for(size_t j = 0; j < o->list.len; j++) {
-      tfobj *ele = o->list.ele[j];
-      release(ele);
-    }
-    break;
-  case TFOBJ_TYPE_SYMBOL;
-  case TFOBJ_TYPE_STR:
-    free(o->str.ptr)
-    break;
-  free(o);
-}
+int compareStringObject(tfobj *a, tfobj *b){
+  size_t minlen = a->str.len < b->str.len ? a->str.len : b->str.len;
+  int cmp = memcmp(a->str.ptr, b->str.ptr, minlen);
 
-void retain(tfobj *o){
-  o->refcount++;
-}
-
-void release(tfobj *o){
-  assert(o->refcount > 0);
-  o->refcount--;
-  if (o->refcount == 0) freeObject(o);
+  if (cmp == 0){
+    if (a->str.len == b->str.len) return 0;
+    else if (a->str.len > b->str.len) return 1;
+    else return -1;
+  } else {
+    if (cmp < 0) return -1;
+    else return 1;
+  }
 }
 
 // list object
@@ -247,17 +262,76 @@ void printObject(tfobj *o){
   }
 }
 
+void basicMathFunctions(tfctx *ctx, tfobj *name){
+  if (ctxCheckStackMinLen(ctx, 2)) return;
+  tfobj *b = ctxStackPop(ctx, TFOBJ_TYPE_INT);
+  tfobj *a = ctxStackPop(ctx, TFOBJ_TYPE_INT);
+  if (a == NULL || b == NULL) return;
+
+  int result;
+  switch(name->str.ptr[0]){
+  case '+': result = a->i + b->i; break;
+  case '-': result = a->i - b->i; break;
+  case '*': result = a->i * b->i; break;
+  
+  ctxStackPush(ctx, createIntObject(result));
+
+}
+
+tffuncentry *getFunctionByName(tfctx *ctx, tfobj *name){
+  for(size_t j = 0; j < ctx->functable.func_count; j++){
+    tffuncentry *fe = ctx->functable.func_table[j];
+    if (compareStringObject(fe->name, name) == 0)
+      return fe;
+  }
+  return NULL;
+}
+
+tffuncentry *registerFunction(tfctx *ctx, tfobjname *name){
+  ctx -> functable.func_table = 
+    xrealloc(ctx->functable.func_table, sizeof(tffuncentry*) * (ctx->functable.func_count+1));
+  tffuncentry *fe = xmalloc(sizeof(tffuncentry));
+  tx -> functable.func_table[ctx->functable.func_count] = fe;
+  ctx->functable.func_count++;
+  fe->name = name;
+  retaint(name);
+  fe->callback = NULL;
+  fe->user_func = NULL;
+  return fe;
+}
+
+void registerCFunction(tfctx *ctx, char *name, 
+		void (*callback) (tfctx *ctx, tfobj *name))
+{
+  tffuncentry *fe;
+  tfobj *oname = createStringObject(name, strlen(name));
+
+  fe = getFunctionByName(ctx, oname);
+  if (fe){
+    if (fe->user_func){
+      release(fe->user_func);
+      fe->user_func = NULL;
+    }
+    fe->callback = callback
+  } else {
+    fe = registerFunction(ctx, oname);
+    fe->callback = callback;
+  }
+  release(oname);
+}
+
 tfctx *createContext(void){
   tfctx *ctx = xmalloc(sizeof(*ctx));
   ctx->stack = createListObject();
   ctx->functable.func_table = NULL;
   ctx->functable.func_count = 0;
-  registerFunction(ctx, "+", basicMathFunctions);
+  registerCFunction(ctx, "+", basicMathFunctions);
   return ctx;
-}
 
-void callSymbol(tfctx *ctx, tfobj *word){
-  
+int callSymbol(tfctx *ctx, tfobj *word){
+  tffuncentry *fe = getFunctionByName(ctx, word);
+  if (fe == NULL) return 1;
+  return 0;
 }
 
 // execute program

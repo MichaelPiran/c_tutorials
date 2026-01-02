@@ -6,4 +6,4 @@ Following course:
 
 
 
-Visto fino a lezione 26.
+Visto fino a lezione 27.
